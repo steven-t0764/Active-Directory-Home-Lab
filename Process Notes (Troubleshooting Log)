@@ -131,3 +131,57 @@ sudo /opt/splunk/bin/splunk start --accept-license
 - Splunk installs to `/opt/splunk`.
 - Unrelated `apt` errors (404s on packages like `bubblewrap`, `libheif`) were fixed with `sudo apt update` — stale package index, not a Splunk issue.
 
+# Windows 11 VM — Local Account Password Reset (Sticky Keys / Utilman Method)
+
+Forgot the local account password on the Windows 11 VM. Used the classic utilman.exe swap to reset it without knowing the old password.
+
+## Steps
+
+1. **Attach Windows 11 ISO** to the VM's optical drive (Settings → Storage).
+2. **Boot from the ISO** — on VM start, tap **F12** repeatedly for the VirtualBox boot menu, press **`c`** for CD-ROM.
+   > If boot fails ("could not read from boot medium"), remove any extra/unrelated ISOs (e.g. VBoxGuestAdditions.iso) so only the Windows ISO is attached.
+3. On the language selection screen of Setup, press **Shift + F10** to open a command prompt.
+4. Identify the Windows drive letter:
+```cmd
+diskpart
+list volume
+exit
+```
+> In the recovery environment, Windows is often **not** `C:` — confirm from the volume list (NTFS partition, largest size, no CD-ROM/hidden label).
+
+5. **Swap `utilman.exe` with `cmd.exe`:**
+```cmd
+copy C:\Windows\System32\utilman.exe C:\Windows\System32\utilman.exe.bak
+copy C:\Windows\System32\cmd.exe C:\Windows\System32\utilman.exe
+```
+(Confirm overwrite with `Y`)
+
+6. Close the command prompt, exit Setup, and reboot the VM normally into Windows (not the ISO).
+
+7. **On the login screen**, click the accessibility icon (bottom-right corner) — launches a SYSTEM command prompt.
+
+8. **Reset the password:**
+```cmd
+net user
+net user <username> <newpassword>
+```
+
+9. Log in with the new password.
+
+10. **Restore utilman.exe** (boot back into recovery via ISO + Shift+F10):
+```cmd
+copy C:\Windows\System32\utilman.exe.bak C:\Windows\System32\utilman.exe
+```
+
+## Issue Hit Along the Way: Boot Loader Error
+After fixing the boot ISO issue, selecting "Hard Disk" to boot into Windows normally resulted in a blank screen / "system device cannot be found" when running `bootrec`.
+
+**Cause:** disk was partitioned as **GPT/UEFI** (confirmed by hidden EFI System + Recovery partitions in `diskpart`), but the VM was set to legacy **BIOS** mode — BIOS cannot boot a GPT disk.
+
+**Fix:** VM Settings → System → Motherboard → enable **"Enable EFI (special OSes only)"**. VM then booted normally.
+
+## Key Takeaways
+- This is a legitimate local privilege escalation technique — relevant to the project as an example of what physical/console access to a domain-joined machine can do.
+- Always confirm the actual Windows drive letter with `diskpart` before running recovery commands — it's not guaranteed to be `C:`.
+- Match VM firmware mode (BIOS vs UEFI) to how the disk was actually partitioned, or boot repair tools will fail.
+- Remember to restore `utilman.exe` afterward so the accessibility feature works normally again.
